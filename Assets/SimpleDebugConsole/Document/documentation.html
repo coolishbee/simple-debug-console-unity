@@ -1,42 +1,21 @@
 <h1 id="simple-debug-console-unity">simple-debug-console-unity</h1>
-<p>It is difficult to retrieve logs and warnings from Unity outside the
-editor. To make it easier, this console displays output from
-<code>Debug</code> in the game itself. This is especially useful on
-mobile devices.</p>
-<figure>
-<img src="http://matthewminer.com/images/consolation@2x.png#2"
-alt="Console in Unity game" />
-<figcaption aria-hidden="true">Console in Unity game</figcaption>
-</figure>
-<h2 id="installing">Installing</h2>
-<h3 id="copy-script">Copy Script</h3>
-<p>The <code>Console</code> component is entirely self-contained in
-<em>Console.cs</em>, so installation is as simple as dragging this
-script into your project.</p>
-<h3 id="unity-package-manager">Unity Package Manager</h3>
-<p>Alternatively, add the package to your project via <a
-href="https://docs.unity3d.com/Manual/upm-ui.html">UPM</a> using the Git
-URL https://github.com/mminer/consolation.git. You can also clone the
-repository and point UPM to your local copy.</p>
-<figure>
-<img src="http://matthewminer.com/images/consolation-upm.gif"
-alt="Adding package to UPM" />
-<figcaption aria-hidden="true">Adding package to UPM</figcaption>
-</figure>
-<h2 id="using">Using</h2>
-<p>Attach the <code>Console</code> component to a game object. When
-playing your game, open the console window with the back quote key
-<kbd>`</kbd>. This shortcut is configurable in the inspector.</p>
-<p>Alternatively, enable shake-to-open in the inspector to open the
-console on mobile devices. The component provides an option to prevent
-accidental shakes by requiring 3 or more fingers on the screen.</p>
-<p>Several other settings like font size and the maximum log count are
-also configurable in the inspector.</p>
-<figure>
-<img src="http://matthewminer.com/images/consolation-inspector.png"
-alt="Console component inspector" />
-<figcaption aria-hidden="true">Console component inspector</figcaption>
-</figure>
-<h2 id="compatibility">Compatibility</h2>
-<p>Supports Unity 2017.x and above. It has not been tested on all the
-platforms that Unity supports but it probably works on most.</p>
+<p>It’s a very simple runtime log viewer using imgui. This is especially
+useful on mobile devices.</p>
+<p><img src="img/demo.gif" alt="demo" /></p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Resize to fit mobile device resolution</li>
+<li>Open with three-finger gesture(touch and drag)</li>
+<li>Log type filtering</li>
+<li>Portrait and Landscape support</li>
+<li>16:9 9:16 fixed ratio</li>
+</ul>
+<h2 id="usage">Usage</h2>
+<p>Simply drop the scripts in your Unity3D Project and attach
+<code>SimpleDebugConsole</code> to a GameObject.</p>
+<h2 id="support">Support</h2>
+<p>Please visit this repository’s <a
+href="https://github.com/coolishbee/simple-debug-console-unity/issues">Github
+issue tracker</a> for feature requests and bug reports related
+specifically to the Tool.</p>
+<p>For other any questions, send us an email to chc3484@gmail.com</p>
