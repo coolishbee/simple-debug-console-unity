@@ -16,16 +16,7 @@ public static class GUIHelper
     private static float fontSizeFactor = 1.0f;
 
     public static float rectX = 0;
-    public static float rectY = 0;
-    //public static float rectWidth = 0;
-    //public static float rectHeight = 0;
-
-    public static Rect ClientArea;
-
-    public static int Test(int width, int height)
-    {
-        return (height == 0) ? width : Test(height, width % height);
-    }
+    public static float rectY = 0;    
 
     private static void Setup()
     {        
@@ -70,7 +61,7 @@ public static class GUIHelper
 
     public static bool DrawButton(string text, float width, float height)
     {
-        Setup();        
+        Setup();
 
         return GUILayout.Button(text, btnStyle, GUILayout.Width(width * factorX), GUILayout.Height(height * factorY));
     }
@@ -89,24 +80,16 @@ public static class GUIHelper
             factorY = Screen.height / portraitHeight;
             fontSizeFactor = factorY;            
 
-            float rectHeight = Screen.width / (Screen.height / Screen.height / 16f) / 9f;
-            Debug.Log("rectHeight " + rectHeight);
-            rectY = Screen.height - rectHeight;
-            Debug.Log("rectY " + rectY);
-            Debug.Log("Screen width " + Screen.width);
-            Debug.Log("Screen height " + Screen.height);
+            float rectHeight = Screen.width / (Screen.height / Screen.height / 16f) / 9f;            
+            rectY = Screen.height - rectHeight;            
         }
         else { //Landscape
             factorX = Screen.width / landscapeWidth;
             factorY = Screen.height / landscapeHeight;
             fontSizeFactor = factorX;
 
-            float rectWidth = Screen.height / (Screen.width / Screen.width / 16f) / 9f;
-            Debug.Log("rectWidth " + rectWidth);
-            rectX = Screen.width - rectWidth;
-            Debug.Log("rectX " + rectX);
-            Debug.Log("Screen width " + Screen.width);
-            Debug.Log("Screen height " + Screen.height);
+            float rectWidth = Screen.height / (Screen.width / Screen.width / 16f) / 9f;            
+            rectX = Screen.width - rectWidth;            
         }
     }
 }
