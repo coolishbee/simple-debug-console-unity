@@ -3,6 +3,8 @@
 It's a very simple runtime log viewer using imgui. 
 This is especially useful on mobile devices.
 
+You can download also from [Unity Asset Store](https://assetstore.unity.com/packages/slug/228001)
+
 <img src="img/demo.gif" alt="demo" />
 
 ## Features
