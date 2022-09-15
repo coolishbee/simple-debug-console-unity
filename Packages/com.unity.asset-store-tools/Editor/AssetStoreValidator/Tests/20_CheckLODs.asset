@@ -20,3 +20,14 @@ MonoBehaviour:
     sure that LODs are correctly set up in the prefab. Refer to the LODGroup\r Manual
     to set up your LODs."
   TestMethodName: _20_CheckLODsonyourPrefabs
+  ErrorCategory:
+    Filter:
+    - 3D
+    - Essentials
+    - Templates
+    FilterIsInclusive: 1
+    AppliesToSubCategories: 1
+  WarningCategory:
+    Filter: []
+    FilterIsInclusive: 0
+    AppliesToSubCategories: 1

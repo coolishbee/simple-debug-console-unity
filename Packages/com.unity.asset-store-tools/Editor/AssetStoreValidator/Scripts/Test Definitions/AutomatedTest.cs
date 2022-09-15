@@ -2,7 +2,7 @@
 
 namespace AssetStoreTools.Validator
 {
-    public class AutomatedTest : ValidationTest
+    internal class AutomatedTest : ValidationTest
     {
         public AutomatedTest(ValidationTestScriptableObject source) : base(source) { }
 

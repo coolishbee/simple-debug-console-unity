@@ -18,3 +18,11 @@ MonoBehaviour:
   Description: JavaScript / UnityScript files are not allowed, as they are no longer
     supported.
   TestMethodName: _12_RemoveJavaScript
+  ErrorCategory:
+    Filter: []
+    FilterIsInclusive: 0
+    AppliesToSubCategories: 1
+  WarningCategory:
+    Filter: []
+    FilterIsInclusive: 0
+    AppliesToSubCategories: 1

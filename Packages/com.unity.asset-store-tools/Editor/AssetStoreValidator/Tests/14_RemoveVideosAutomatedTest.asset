@@ -19,3 +19,11 @@ MonoBehaviour:
     video file to an online video hosting website (Youtube, Vimeo, etc.) and include
     the link to the video in your written documentation.
   TestMethodName: _14_RemoveVideoFiles
+  ErrorCategory:
+    Filter: []
+    FilterIsInclusive: 0
+    AppliesToSubCategories: 1
+  WarningCategory:
+    Filter: []
+    FilterIsInclusive: 0
+    AppliesToSubCategories: 1

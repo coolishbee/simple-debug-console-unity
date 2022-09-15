@@ -18,3 +18,11 @@ MonoBehaviour:
   Description: You cannot redistribute SpeedTree files on other marketplaces. Please
     remove all SpeedTree files that are in this package.
   TestMethodName: _18_RemoveSpeedTreeFiles
+  ErrorCategory:
+    Filter: []
+    FilterIsInclusive: 1
+    AppliesToSubCategories: 1
+  WarningCategory:
+    Filter: []
+    FilterIsInclusive: 0
+    AppliesToSubCategories: 1

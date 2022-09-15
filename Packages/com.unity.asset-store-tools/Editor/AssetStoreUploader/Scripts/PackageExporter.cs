@@ -8,10 +8,11 @@ using System.Diagnostics;
 using System.Threading;
 using System.Reflection;
 using System.Threading.Tasks;
+using AssetStoreTools.Utility.Json;
 
 namespace AssetStoreTools.Uploader
 {
-    public static class PackageExporter
+    internal static class PackageExporter
     {
         private const string ExportMethodWithoutDependencies = "UnityEditor.PackageUtility.ExportPackage";
         private const string ExportMethodWithDependencies = "UnityEditor.PackageUtility.ExportPackageAndPackageManagerManifest";
@@ -22,15 +23,26 @@ namespace AssetStoreTools.Uploader
         private const string ProgressBarStep3 = "Compressing package...";
 
         private const string TemporaryExportPathName = "CustomExport";
+        private const string PackagesLockPath = "Packages/packages-lock.json";
+        private const string ManifestJsonPath = "Packages/manifest.json";
 
-        public static async void ExportPackage(string[] exportPaths, string outputFilename,
-            bool includeDependencies, bool isCompleteProject, Action onSuccess, Action<ASError> onFail, bool useCustomExporter = false)
+        internal class ExportResult
+        {
+            public bool Success;
+            public string ExportedPath;
+            public ASError Error;
+
+            public static implicit operator bool(ExportResult value)
+            {
+                return value != null && value.Success;
+            }
+        }
+
+        public static async Task<ExportResult> ExportPackage(string[] exportPaths, string outputFilename,
+            bool includeDependencies, bool isCompleteProject, bool useCustomExporter = false)
         {
             if (exportPaths == null || exportPaths.Length == 0)
-            {
-                onFail?.Invoke(ASError.GetGenericError(new ArgumentException("PackageExporter received an invalid export paths array")));
-                return;
-            }
+                return new ExportResult() { Success = false, Error = ASError.GetGenericError(new ArgumentException("Package Exporting failed: received an invalid export paths array")) };
 
             EditorUtility.DisplayProgressBar(ProgressBarTitle, ProgressBarStep1, 0.1f);
             AssetDatabase.SaveAssets();
@@ -46,12 +58,11 @@ namespace AssetStoreTools.Uploader
                     ExportPackageCustom(exportPaths, outputFilename, includeDependencies);
 
                 ASDebug.Log($"Package file has been created at {outputFilename}");
-
-                onSuccess?.Invoke();
+                return new ExportResult() { Success = true, ExportedPath = outputFilename };
             }
             catch (Exception e)
             {
-                onFail?.Invoke(ASError.GetGenericError(e));
+                return new ExportResult() { Success = false, Error = ASError.GetGenericError(e) };
             }
             finally
             {
@@ -67,10 +78,13 @@ namespace AssetStoreTools.Uploader
             return updatedExportPaths;
         }
 
-        private async static Task ExportPackageNative(string[] exportPaths, string outputFilename, bool includeDependencies)
+        private static async Task ExportPackageNative(string[] exportPaths, string outputFilename, bool includeDependencies)
         {
             ASDebug.Log("Using native package exporter");
-            var guids = GetGuids(exportPaths);
+            var guids = GetGuids(exportPaths, out bool onlyFolders);
+
+            if (guids.Length == 0 || onlyFolders)
+                throw new ArgumentException("Package Exporting failed: provided export paths are empty or only contain empty folders");
 
             string exportMethod = ExportMethodWithoutDependencies;
             if (includeDependencies)
@@ -87,7 +101,7 @@ namespace AssetStoreTools.Uploader
 
             ASDebug.Log("Invoking native export method");
 
-            method.Invoke(null, new object[] { guids, outputFilename });
+            method?.Invoke(null, new object[] { guids, outputFilename });
 
             // The internal exporter methods are asynchronous, therefore
             // we need to wait for exporting to finish before returning
@@ -98,9 +112,10 @@ namespace AssetStoreTools.Uploader
             });
         }
 
-        private static string[] GetGuids(string[] exportPaths)
+        private static string[] GetGuids(string[] exportPaths, out bool onlyFolders)
         {
             var guids = new List<string>();
+            onlyFolders = true;
 
             foreach (var exportPath in exportPaths)
             {
@@ -113,6 +128,8 @@ namespace AssetStoreTools.Uploader
                         continue;
 
                     guids.Add(guid);
+                    if (onlyFolders == true && (File.Exists(assetPath)))
+                        onlyFolders = false;
                 }
             }
 
@@ -184,7 +201,7 @@ namespace AssetStoreTools.Uploader
 
         #region Experimental
 
-        public static void ExportPackageCustom(string[] exportPaths, string outputFilename, bool includeDependencies)
+        private static void ExportPackageCustom(string[] exportPaths, string outputFilename, bool includeDependencies)
         {
             ASDebug.Log("Using custom package exporter");
             // Create a temporary export path
@@ -251,10 +268,38 @@ namespace AssetStoreTools.Uploader
 
             // At this time we only include either all or none of the UPM dependencies.
             // In the future, we'll be able to allow selective dependencies from the manifest.json
-            // To-do: filter out non-registry packages as these will cause an error when importing the .unitypackage into a project
-            var manifestPath = $"{tempOutputPath}/packagemanagermanifest";
-            Directory.CreateDirectory(manifestPath);
-            File.Copy("Packages/manifest.json", $"{manifestPath}/asset");
+            var tempManifestDirectoryPath = $"{tempOutputPath}/packagemanagermanifest";
+            Directory.CreateDirectory(tempManifestDirectoryPath);
+            var tempManifestFilePath = $"{tempManifestDirectoryPath}/asset";
+
+            // manifest.json may also need to be tweaked to exclude local packages, because once
+            // the package gets imported on another machine, local paths will likely be invalid
+            var manifestJsonString = File.ReadAllText(ManifestJsonPath);
+            var manifestJson = JSONParser.SimpleParse(manifestJsonString);
+            var dependencies = manifestJson["dependencies"].AsDict();
+
+            var allPackages = GetAllLocalPackages();
+
+            foreach (var package in allPackages)
+            {
+                var packageSource = package["source"].AsString();
+                if (packageSource != "local" && packageSource != "embedded")
+                    continue;
+
+                var packageName = package["name"].AsString();
+
+                // Print out a list of excluded packages - Asset Store Tools warning would always be printed, therefore is excluded
+                if (packageName != "com.unity.asset-store-tools")
+                    UnityEngine.Debug.LogWarning($"Found an unsupported Package Manager dependency type \"{packageSource}\". " +
+                        $"These dependencies are not supported in the project's manifest.json and will be skipped: \"{packageName}\"");
+
+                if (!dependencies.ContainsKey(packageName))
+                    continue;
+
+                dependencies.Remove(packageName);
+            }
+
+            File.WriteAllText(tempManifestFilePath, manifestJson.ToString());
         }
 
         private static Dictionary<string, string> GetPathGuidPairs(string[] exportPaths)
@@ -384,5 +429,122 @@ namespace AssetStoreTools.Uploader
         }
 
         #endregion
+
+        #region Utility
+
+        public static List<JsonValue> GetAllLocalPackages()
+        {
+            try
+            {
+#if !UNITY_2019_4_0
+                if (File.Exists(PackagesLockPath))
+                    return CollectPackagesFromPackagesLock();
+#endif
+                // Fallback for 2019.4.0f1 which does not have a packages-lock.json (or it is outdated if using a downgraded project)
+                return CollectPackagesManual();
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static List<JsonValue> CollectPackagesFromPackagesLock()
+        {
+            string packageLockJsonString = File.ReadAllText(PackagesLockPath);
+            JSONParser parser = new JSONParser(packageLockJsonString);
+            var packageLockJson = parser.Parse();
+
+            var packages = packageLockJson.Get("dependencies").AsDict();
+            var localPackages = new List<JsonValue>();
+
+            foreach (var kvp in packages)
+            {
+                var packageSource = kvp.Value.Get("source").AsString();
+
+                if (!packageSource.Equals("embedded") && !packageSource.Equals("local"))
+                    continue;
+
+                var packagePath = kvp.Value.Get("version").AsString().Substring("file:".Length);
+
+                if (packageSource.Equals("embedded"))
+                    packagePath = $"Packages/{packagePath}";
+                else if (packageSource.Equals("local") && packagePath.StartsWith("../"))
+                    packagePath = packagePath.Substring("../".Length);
+
+                JsonValue localPackage = new JsonValue
+                {
+                    ["name"] = JsonValue.NewString(kvp.Key),
+                    ["source"] = JsonValue.NewString(kvp.Value.Get("source")),
+                    ["path_absolute"] = JsonValue.NewString(packagePath),
+                    ["path_assetdb"] = JsonValue.NewString($"Packages/{kvp.Key}")
+                };
+
+                localPackages.Add(localPackage);
+            }
+
+            return localPackages;
+        }
+
+        private static List<JsonValue> CollectPackagesManual()
+        {
+            // Scrape manifest.json for local packages
+            string manifestJsonString = File.ReadAllText(ManifestJsonPath);
+            JSONParser parser = new JSONParser(manifestJsonString);
+            var manifestJson = parser.Parse();
+
+            var packages = manifestJson.Get("dependencies").AsDict();
+            var localPackages = new List<JsonValue>();
+
+            foreach (var kvp in packages)
+            {
+                if (!kvp.Value.AsString().StartsWith("file:"))
+                    continue;
+
+                var packagePath = kvp.Value.AsString().Substring("file:".Length);
+                if (packagePath.StartsWith("../"))
+                    packagePath = packagePath.Substring("../".Length);
+
+                JsonValue localPackage = new JsonValue
+                {
+                    ["name"] = JsonValue.NewString(kvp.Key),
+                    ["source"] = JsonValue.NewString("local"),
+                    ["path_absolute"] = JsonValue.NewString(packagePath),
+                    ["path_assetdb"] = JsonValue.NewString($"Packages/{kvp.Key}")
+                };
+
+                localPackages.Add(localPackage);
+            }
+
+            // Scrape Packages folder for embedded packages
+            foreach (var directory in Directory.GetDirectories("Packages"))
+            {
+                var path = directory.Replace("\\", "/");
+                var packageManifestPath = $"{path}/package.json";
+
+                if (!File.Exists(packageManifestPath))
+                    continue;
+
+                string packageManifestJsonString = File.ReadAllText(packageManifestPath);
+                parser = new JSONParser(packageManifestJsonString);
+                var packageManifestJson = parser.Parse();
+
+                var packageName = packageManifestJson["name"].AsString();
+
+                JsonValue embeddedPackage = new JsonValue()
+                {
+                    ["name"] = JsonValue.NewString(packageName),
+                    ["source"] = JsonValue.NewString("embedded"),
+                    ["path_absolute"] = JsonValue.NewString(path),
+                    ["path_assetdb"] = JsonValue.NewString($"Packages/{packageName}")
+                };
+
+                localPackages.Add(embeddedPackage);
+            }
+
+            return localPackages;
+        }
+
+#endregion
     }
 }

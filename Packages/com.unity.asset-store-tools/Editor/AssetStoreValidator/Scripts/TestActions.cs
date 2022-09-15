@@ -5,11 +5,12 @@ using System.Linq;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.Experimental.Rendering;
 using UnityEngine.SceneManagement;
 
 namespace AssetStoreTools.Validator
 {
-    public class TestActions
+    internal class TestActions
     {
         private enum FileType
         {
@@ -157,8 +158,8 @@ namespace AssetStoreTools.Validator
             meshes.AddRange(meshFilters.Select(m => m.sharedMesh));
             meshes.AddRange(skinnedMeshes.Select(m => m.sharedMesh));
 
-            meshes = meshes.Where(m => AssetDatabase.GetAssetPath(m).StartsWith("Assets" + Path.DirectorySeparatorChar) ||
-            AssetDatabase.GetAssetPath(m).StartsWith("Assets" + Path.AltDirectorySeparatorChar)).ToList();
+            meshes = meshes.Where(m => AssetDatabase.GetAssetPath(m).StartsWith("Assets/") ||
+            AssetDatabase.GetAssetPath(m).StartsWith("Packages/")).ToList();
 
             return meshes.ToArray();
         }
@@ -242,8 +243,9 @@ namespace AssetStoreTools.Validator
 
             var usedModelPaths = new List<string>();
             var prefabs = GetObjectsFromAssets(FileType.Prefab);
+            var missingMeshReferencePrefabs = new List<GameObject>();
 
-            // Get all meshes in existing prefabs
+            // Get all meshes in existing prefabs and check if prefab has missing mesh references
             foreach (var o in prefabs)
             {
                 var p = (GameObject) o;
@@ -259,6 +261,9 @@ namespace AssetStoreTools.Validator
                     string meshPath = AssetDatabase.GetAssetPath(mesh);
                     usedModelPaths.Add(meshPath);
                 }
+
+                if (HasMissingMeshReferences(p))
+                    missingMeshReferencePrefabs.Add(p);
             }
 
             // Get all meshes in existing models
@@ -276,7 +281,10 @@ namespace AssetStoreTools.Validator
             result.Result = TestResult.ResultStatus.Fail;
             var models = unusedModels.Select(AssetDatabase.LoadAssetAtPath<UnityEngine.Object>).ToArray();
             result.AddMessage("The following models do not have associated prefabs", null, models);
-            
+
+            if (missingMeshReferencePrefabs.Count > 0)
+                result.AddMessage("The following prefabs have missing mesh references", null, missingMeshReferencePrefabs.ToArray());
+
             return result;
         }
 
@@ -304,6 +312,20 @@ namespace AssetStoreTools.Validator
             return paths;
         }
 
+        private bool HasMissingMeshReferences(GameObject go)
+        {
+            var meshes = go.GetComponentsInChildren<MeshFilter>(true);
+            var skinnedMeshes = go.GetComponentsInChildren<SkinnedMeshRenderer>(true);
+
+            if (meshes.Length == 0 && skinnedMeshes.Length == 0)
+                return false;
+
+            if (meshes.Any(x => x.sharedMesh == null) || skinnedMeshes.Any(x => x.sharedMesh == null))
+                return true;
+
+            return false;
+        }
+
         #endregion
 
         #region 3_ResetPrefabs
@@ -321,7 +343,17 @@ namespace AssetStoreTools.Validator
             foreach (var o in prefabs)
             {
                 var p = (GameObject) o;
-                if (p.transform.position != Vector3.zero || p.transform.localScale != Vector3.one)
+                if (!GetCustomMeshesInObject(p).Any())
+                    continue;
+
+                var positionString = p.transform.position.ToString("F12");
+                var rotationString = p.transform.rotation.eulerAngles.ToString("F12");
+                var localScaleString = p.transform.localScale.ToString("F12");
+
+                var vectorZeroString = Vector3.zero.ToString("F12");
+                var vectorOneString = Vector3.one.ToString("F12");
+
+                if (positionString != vectorZeroString || rotationString != vectorZeroString || localScaleString != vectorOneString)
                     badPrefabs.Add(p);
             }
 
@@ -571,7 +603,7 @@ namespace AssetStoreTools.Validator
         private GameObject[] GetAllAssetsWithMissingComponents()
         {
             var missingReferenceAssets = new List<GameObject>();
-            var assetPaths = AssetDatabase.GetAllAssetPaths().Where(p => p.StartsWith("Assets"));
+            var assetPaths = AssetDatabase.GetAllAssetPaths().Where(p => p.StartsWith(s_mainFolderPath));
 
             foreach (var path in assetPaths)
             {
@@ -920,12 +952,16 @@ namespace AssetStoreTools.Validator
             };
 
             var shaders = GetObjectsFromAssets(FileType.Shader);
-            var badShaders = shaders.Where(s => ShaderHasError(s)).ToArray();
+            var badShaders = shaders.Where(ShaderHasError).ToArray();
 
             if (badShaders.Length > 0)
             {
                 result.Result = TestResult.ResultStatus.Fail;
                 result.AddMessage("The following shader files have errors", null, badShaders);
+            }
+            else
+            {
+                result.AddMessage("All found Shaders have no compilation errors!");
             }
 
             return result;
@@ -933,16 +969,17 @@ namespace AssetStoreTools.Validator
 
         private bool ShaderHasError(UnityEngine.Object obj)
         {
-            if (obj is Shader)
-                return ShaderUtil.ShaderHasError(obj as Shader);
-
-            if (obj is ComputeShader)
-                return ShaderUtil.GetComputeShaderMessageCount(obj as ComputeShader) > 0;
-
-            if (obj is UnityEngine.Experimental.Rendering.RayTracingShader)
-                return ShaderUtil.GetRayTracingShaderMessageCount(obj as UnityEngine.Experimental.Rendering.RayTracingShader) > 0;
-
-            return false;
+            switch (obj)
+            {
+                case Shader shader:
+                    return ShaderUtil.ShaderHasError(shader);
+                case ComputeShader shader:
+                    return ShaderUtil.GetComputeShaderMessageCount(shader) > 0;
+                case RayTracingShader shader:
+                    return ShaderUtil.GetRayTracingShaderMessageCount(shader) > 0;
+                default:
+                    return false;
+            }
         }
 
         #endregion

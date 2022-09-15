@@ -1,68 +1,49 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading.Tasks;
+using AssetStoreTools.Utility;
 using AssetStoreTools.Utility.Json;
-using AssetStoreTools.Validator;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
 
 namespace AssetStoreTools.Uploader
 {
-    public class FolderUploadWorkflowView : VisualElement
+    internal class FolderUploadWorkflowView : UploadWorkflowView
     {
-        public const string SerializedName = "folderWorkflow";
+        public const string WorkflowName = "FolderWorkflow";
+        public const string WorkflowDisplayName = "From Assets Folder";
 
-        private TextField _pathSelectionField;
+        public override string Name => WorkflowName;
+        public override string DisplayName => WorkflowDisplayName;
+
         private Toggle _dependenciesToggle;
+        private bool _isCompleteProject;
+        private string _category;
 
         private ValidationElement _validationElement;
         private VisualElement _specialFoldersElement;
-
-        private bool _isCompleteProject;
-
-        // Upload data
-        private List<string> _selectedExportPaths = new List<string>();
-        private string _localPackageGuid;
-        private string _localPackagePath;
-
-        private Action _serializeSelection;
 
         // Special folders that would not work if not placed directly in the 'Assets' folder
         private readonly string[] _extraAssetFolderNames =
         {
             "Editor Default Resources", "Gizmos", "Plugins",
-            "StreamingAssets", "Standard Assets", "WebGLTemplates"
+            "StreamingAssets", "Standard Assets", "WebGLTemplates",
+            "ExternalDependencyManager"
         };
 
-        private FolderUploadWorkflowView(bool isCompleteProject, Action serializeSelection)
+        private FolderUploadWorkflowView(string category, bool isCompleteProject, Action serializeSelection) : base(serializeSelection)
         {
             _isCompleteProject = isCompleteProject;
-            _serializeSelection = serializeSelection;
-            style.display = DisplayStyle.None;
-
+            _category = category;
+            
             SetupWorkflow();
         }
 
-        public static FolderUploadWorkflowView Create(bool isCompleteProject, Action serializeAction)
+        public static FolderUploadWorkflowView Create(string category, bool isCompleteProject, Action serializeAction)
         {
-            return Create(isCompleteProject, serializeAction, default(JsonValue));
-        }
-
-        public static FolderUploadWorkflowView Create(bool isCompleteProject, Action serializeAction, JsonValue serializedValues)
-        {
-            try
-            {
-                var newInstance = new FolderUploadWorkflowView(isCompleteProject, serializeAction);
-                if (!serializedValues.Equals(default(JsonValue)) && serializedValues.ContainsKey(SerializedName))
-                    newInstance.LoadSerializedWorkflow(serializedValues[SerializedName]);
-                return newInstance;
-            }
-            catch
-            {
-                ASDebug.LogError("Failed to load serialized values for a new Folder Upload Workflow. Returning a default one");
-                return new FolderUploadWorkflowView(isCompleteProject, serializeAction);
-            }
+            return new FolderUploadWorkflowView(category, isCompleteProject, serializeAction);
         }
 
         public void SetCompleteProject(bool isCompleteProject)
@@ -70,27 +51,12 @@ namespace AssetStoreTools.Uploader
             _isCompleteProject = isCompleteProject;
         }
 
-        public string[] GetSelectedExportPaths()
-        {
-            return _selectedExportPaths.ToArray();
-        }
-
         public bool GetIncludeDependencies()
         {
             return _dependenciesToggle.value;
         }
 
-        public string GetLocalPackageGuid()
-        {
-            return _localPackageGuid;
-        }
-
-        public string GetLocalPackagePath()
-        {
-            return _localPackagePath;
-        }
-
-        private void SetupWorkflow()
+        protected sealed override void SetupWorkflow()
         {
             // Path selection
             VisualElement folderPathSelectionRow = new VisualElement();
@@ -112,15 +78,15 @@ namespace AssetStoreTools.Uploader
             labelHelpRow.Add(folderPathLabel);
             labelHelpRow.Add(folderPathLabelTooltip);
 
-            _pathSelectionField = new TextField();
-            _pathSelectionField.AddToClassList("path-selection-field");
-            _pathSelectionField.isReadOnly = true;
+            PathSelectionField = new TextField();
+            PathSelectionField.AddToClassList("path-selection-field");
+            PathSelectionField.isReadOnly = true;
 
             Button browsePathButton = new Button(BrowsePath) { name = "BrowsePathButton", text = "Browse" };
             browsePathButton.AddToClassList("browse-button");
 
             folderPathSelectionRow.Add(labelHelpRow);
-            folderPathSelectionRow.Add(_pathSelectionField);
+            folderPathSelectionRow.Add(PathSelectionField);
             folderPathSelectionRow.Add(browsePathButton);
 
             Add(folderPathSelectionRow);
@@ -152,37 +118,55 @@ namespace AssetStoreTools.Uploader
 
             _validationElement = new ValidationElement();
             Add(_validationElement);
+            
+            _validationElement.SetCategory(_category);
         }
-        
-        private void LoadSerializedWorkflow(JsonValue json)
+
+        public override JsonValue SerializeWorkflow()
         {
-            var paths = json["paths"].AsList();
+            var workflowDict = base.SerializeWorkflow();
+            workflowDict["dependencies"] = GetIncludeDependencies();
 
-            if (paths.Count == 0)
+            return workflowDict;
+        }
+
+        public override void LoadSerializedWorkflow(JsonValue json, string lastUploadedPath, string lastUploadedGuid)
+        {
+            if(!DeserializeMainExportPath(json, out string mainExportPath) || !Directory.Exists(mainExportPath))
+            {
+                ASDebug.Log("Unable to restore Folder upload workflow paths from the local cache");
+                LoadSerializedWorkflowFallback(lastUploadedPath, lastUploadedGuid);
                 return;
+            }
 
-            // Do not restore any values if main export path no longer exists
-            if (!Directory.Exists(paths[0].AsString()))
+            DeserializeExtraExportPaths(json, out List<string> extraExportPaths);
+
+            var dependenciesToggle = json["dependencies"].AsBool();
+
+            ASDebug.Log($"Restoring serialized Folder workflow values from local cache");
+            HandleFolderUploadPathSelection(mainExportPath, extraExportPaths, false);
+            _dependenciesToggle.SetValueWithoutNotify(dependenciesToggle);
+        }
+
+        public override void LoadSerializedWorkflowFallback(string lastUploadedPath, string lastUploadedGuid)
+        {
+            var mainExportPath = AssetDatabase.GUIDToAssetPath(lastUploadedGuid);
+            if (string.IsNullOrEmpty(mainExportPath))
+                mainExportPath = lastUploadedPath;
+
+            if ((!mainExportPath.StartsWith("Assets/") && mainExportPath != "Assets") || !Directory.Exists(mainExportPath))
+            {
+                ASDebug.Log("Unable to restore Folder workflow paths from previous upload values");
                 return;
+            }
 
-            // Get a list of which toggles will need to be enabled
-            var serializedValues = new List<string>();
-            for (int i = 1; i < paths.Count; i++)
-                serializedValues.Add(paths[i].AsString());
-
-            // Treat this as a manual selection but with serialized toggle values
-            HandleFolderUploadPathSelection(paths[0].AsString(), serializedValues);
-
-            // Restore the dependencies toggle
-            var dependencies = json["dependencies"];
-            _dependenciesToggle.SetValueWithoutNotify(dependencies.AsBool());
-
-            ASDebug.Log($"Loaded serialized Folder Flow values with {_selectedExportPaths.Count} paths");
+            ASDebug.Log($"Restoring serialized Folder workflow values from previous upload values");
+            HandleFolderUploadPathSelection(mainExportPath, null, false);
         }
 
         #region Folder Upload
 
-        private void BrowsePath()
+        protected override void BrowsePath()
         {
             // Path retrieval
             var absoluteExportPath = string.Empty;
@@ -210,11 +194,18 @@ namespace AssetStoreTools.Uploader
                 if (string.IsNullOrEmpty(absoluteExportPath))
                     return;
             }
-
+            
             if (absoluteExportPath.StartsWith(rootProjectPath))
+            {
                 relativeExportPath = absoluteExportPath.Substring(rootProjectPath.Length);
+            }
+            else
+            {
+                if (ASToolsPreferences.Instance.EnableSymlinkSupport)
+                    SymlinkUtil.FindSymlinkFolderRelative(absoluteExportPath, out relativeExportPath);
+            }
 
-            if (!relativeExportPath.StartsWith("Assets/") && (relativeExportPath != "Assets" || !_isCompleteProject))
+            if (!relativeExportPath.StartsWith("Assets/") && !(relativeExportPath == "Assets" && _isCompleteProject))
             {
                 if (relativeExportPath.StartsWith("Assets") && !_isCompleteProject)
                     EditorUtility.DisplayDialog("Invalid selection",
@@ -225,20 +216,21 @@ namespace AssetStoreTools.Uploader
                 return;
             }
 
-            HandleFolderUploadPathSelection(relativeExportPath, null);
+            HandleFolderUploadPathSelection(relativeExportPath, null, true);
         }
 
-        private void HandleFolderUploadPathSelection(string relativeExportPath, List<string> serializedToggles)
+        private void HandleFolderUploadPathSelection(string relativeExportPath, List<string> serializedToggles, bool serializeValues)
         {
-            string selectedExportPath = relativeExportPath;
-            _pathSelectionField.value = relativeExportPath + "/";
+            PathSelectionField.value = relativeExportPath + "/";
 
-            // Main upload path is the index 0
-            _selectedExportPaths = new List<string> { selectedExportPath };
-            _localPackageGuid = AssetDatabase.AssetPathToGUID(relativeExportPath);
-            _localPackagePath = relativeExportPath;
-            
-            _validationElement.SetLocalPath(relativeExportPath);
+            MainExportPath = relativeExportPath;
+            ExtraExportPaths = new List<string>();
+
+            LocalPackageGuid = AssetDatabase.AssetPathToGUID(MainExportPath);
+            LocalPackagePath = MainExportPath;
+            LocalProjectPath = MainExportPath;
+
+            _validationElement.SetLocalPath(MainExportPath);
 
             if (_specialFoldersElement != null)
             {
@@ -258,11 +250,11 @@ namespace AssetStoreTools.Uploader
                 if (!Directory.Exists(fullExtraPath))
                     continue;
 
-                if (relativeExportPath.ToLower().StartsWith(fullExtraPath.ToLower()))
+                if (MainExportPath.ToLower().StartsWith(fullExtraPath.ToLower()))
                     continue;
 
                 // Don't include nested paths
-                if (!fullExtraPath.ToLower().StartsWith(relativeExportPath.ToLower()))
+                if (!fullExtraPath.ToLower().StartsWith(MainExportPath.ToLower()))
                     specialFoldersFound.Add(fullExtraPath);
             }
 
@@ -270,7 +262,7 @@ namespace AssetStoreTools.Uploader
                 PopulateExtraPathsBox(specialFoldersFound, serializedToggles);
 
             // Only serialize current selection when no serialized toggles were passed
-            if(serializedToggles == null)
+            if (serializeValues)
                 _serializeSelection?.Invoke();
         }
 
@@ -308,7 +300,7 @@ namespace AssetStoreTools.Uploader
                 if (checkedToggles != null && checkedToggles.Contains(toggle.text))
                 {
                     toggle.SetValueWithoutNotify(true);
-                    _selectedExportPaths.Add(toggle.text);
+                    ExtraExportPaths.Add(toggle.text);
                 }
 
                 toggle.RegisterCallback(toggleChangeCallback, toggle.text);
@@ -322,19 +314,26 @@ namespace AssetStoreTools.Uploader
         {
             switch (evt.newValue)
             {
-                case true when !_selectedExportPaths.Contains(folderPath):
-                    _selectedExportPaths.Add(folderPath);
+                case true when !ExtraExportPaths.Contains(folderPath):
+                    ExtraExportPaths.Add(folderPath);
                     break;
-                case false when _selectedExportPaths.Contains(folderPath):
-                    _selectedExportPaths.Remove(folderPath);
+                case false when ExtraExportPaths.Contains(folderPath):
+                    ExtraExportPaths.Remove(folderPath);
                     break;
             }
 
             _serializeSelection?.Invoke();
         }
 
-        #endregion
+        public override async Task<PackageExporter.ExportResult> ExportPackage(bool isCompleteProject)
+        {
+            var paths = GetAllExportPaths();
+            var includeDependencies = GetIncludeDependencies();
+            var outputPath = $"{FileUtil.GetUniqueTempPathInProject()}-{Name}.unitypackage";
 
-        
+            return await PackageExporter.ExportPackage(paths, outputPath, includeDependencies, isCompleteProject, ASToolsPreferences.Instance.UseCustomExporting);
+        }
+
+        #endregion
     }
 }

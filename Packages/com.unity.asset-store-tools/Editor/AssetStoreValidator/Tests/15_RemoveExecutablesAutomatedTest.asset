@@ -20,3 +20,11 @@ MonoBehaviour:
     program from your package and write the instructions on how to download and install
     the installer program in your documentation.
   TestMethodName: _15_RemoveExecutableFiles
+  ErrorCategory:
+    Filter: []
+    FilterIsInclusive: 0
+    AppliesToSubCategories: 1
+  WarningCategory:
+    Filter: []
+    FilterIsInclusive: 0
+    AppliesToSubCategories: 1

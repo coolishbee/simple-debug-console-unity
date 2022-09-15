@@ -18,3 +18,11 @@ MonoBehaviour:
   Description: An error was found within one or more of your shaders. Please make
     sure the shaders inside your package do not have errors and compile successfully.
   TestMethodName: _21_ShaderCompilerErrors
+  ErrorCategory:
+    Filter: []
+    FilterIsInclusive: 0
+    AppliesToSubCategories: 1
+  WarningCategory:
+    Filter: []
+    FilterIsInclusive: 1
+    AppliesToSubCategories: 1

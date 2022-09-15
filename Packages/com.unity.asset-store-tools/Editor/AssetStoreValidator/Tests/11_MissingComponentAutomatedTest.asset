@@ -18,3 +18,11 @@ MonoBehaviour:
   Description: GameObjects in your scene have been found to have missing components.
     We do not allow GameObjects to have broken connections.
   TestMethodName: _11_MissingComponentTest
+  ErrorCategory:
+    Filter: []
+    FilterIsInclusive: 1
+    AppliesToSubCategories: 1
+  WarningCategory:
+    Filter: []
+    FilterIsInclusive: 0
+    AppliesToSubCategories: 1

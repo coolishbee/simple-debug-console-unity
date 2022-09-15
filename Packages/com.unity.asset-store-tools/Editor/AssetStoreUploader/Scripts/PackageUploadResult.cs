@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace AssetStoreTools.Uploader
 {
-    public class PackageUploadResult
+    internal class PackageUploadResult
     {
         public enum UploadStatus
         {

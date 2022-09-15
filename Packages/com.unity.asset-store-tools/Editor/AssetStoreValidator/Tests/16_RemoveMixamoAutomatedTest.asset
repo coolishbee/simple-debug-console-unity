@@ -19,3 +19,11 @@ MonoBehaviour:
     software, such as Mixamo, Fuse, etc. because these files are under licensing
     that does not agree with the Asset Store End User License Agreement (EULA).
   TestMethodName: _16_RemoveMixamoFiles
+  ErrorCategory:
+    Filter: []
+    FilterIsInclusive: 0
+    AppliesToSubCategories: 1
+  WarningCategory:
+    Filter: []
+    FilterIsInclusive: 1
+    AppliesToSubCategories: 1

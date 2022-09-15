@@ -18,3 +18,14 @@ MonoBehaviour:
   Description: We do not recommend audio files that are saved as .mp3 or .ogg. Please
     save all of your audio as lossless format file types, such as .wav.
   TestMethodName: _13_RemoveLossyAudioFiles
+  ErrorCategory:
+    Filter:
+    - Audio
+    - Templates
+    - Essentials
+    FilterIsInclusive: 0
+    AppliesToSubCategories: 1
+  WarningCategory:
+    Filter: []
+    FilterIsInclusive: 0
+    AppliesToSubCategories: 1

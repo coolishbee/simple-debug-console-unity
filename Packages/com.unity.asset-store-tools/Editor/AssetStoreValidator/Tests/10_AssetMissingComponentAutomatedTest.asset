@@ -18,3 +18,11 @@ MonoBehaviour:
   Description: We do not allow missing or broken material/texture/prefab/script connections
     in your package. Please make sure none of your assets have missing components.
   TestMethodName: _10_MissingComponentsInAssets
+  ErrorCategory:
+    Filter: []
+    FilterIsInclusive: 0
+    AppliesToSubCategories: 1
+  WarningCategory:
+    Filter: []
+    FilterIsInclusive: 0
+    AppliesToSubCategories: 1

@@ -20,3 +20,11 @@ MonoBehaviour:
     objects themselves. Make sure that your animations have a naming convention which
     is easy to understand. Please use underscores or numbers if needed.
   TestMethodName: _19_RemoveDuplicateAnimationNames
+  ErrorCategory:
+    Filter: []
+    FilterIsInclusive: 0
+    AppliesToSubCategories: 1
+  WarningCategory:
+    Filter: []
+    FilterIsInclusive: 0
+    AppliesToSubCategories: 1

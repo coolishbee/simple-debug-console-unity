@@ -24,7 +24,7 @@ namespace AssetStoreTools.Uploader
         // Package Data
         private readonly string[] _priorityGroups = { "Draft", "Published" };
         private readonly List<PackageGroup> _packageGroups;
-        private List<Package> _allPackages;
+        private List<PackageView> _allPackages;
 
         // Visual Elements
         private readonly ScrollView _packageScrollView;
@@ -45,7 +45,7 @@ namespace AssetStoreTools.Uploader
         public AllPackageView()
         {
             _packageScrollView = new ScrollView();
-            _allPackages = new List<Package>();
+            _allPackages = new List<PackageView>();
             _packageGroups = new List<PackageGroup>();
 
             _activeSorting = PackageSorting.Name; // Default sorting type returned by the metadata JSON       
@@ -124,58 +124,62 @@ namespace AssetStoreTools.Uploader
 
         #region Package Display
 
-        public void ShowPackagesList(bool useCached, Action<ASError> onFail)
+        public async void ShowPackagesList(bool useCached, Action<ASError> onFail)
         {
             // Clear existing packages in the UI
             ClearPackages();
-            
+
             // Enable spinner and disable refreshing
             EnableSpinner();
             RefreshingPackages?.Invoke(true);
-            
+
             // Read package metadata from the Publisher portal
-            AssetStoreAPI.GetPackageDataFull(useCached, OnPackageDataDownloadSuccess, OnPackageDataDownloadFail);
+            PackageFetcher packageFetcher = new PackageFetcher();
+            var result = await packageFetcher.Fetch(useCached);
 
-            void OnPackageDataDownloadSuccess(JsonValue json)
+            if (!result.Success)
             {
-                // Clear before appending as well
-                ClearPackages();
-                
-                if (json.Equals(default(JsonValue)))
-                {
-                    RefreshingPackages?.Invoke(false);
-                    DisplayNoPackages();
+                if (result.SilentFail)
                     return;
-                }
 
-                DisplayAllPackages(json);
-
-                // Only performed after adding all packages to prevent slowdowns. Sorting also repaints the view
-                Sort(_activeSorting);
-
-                RefreshingPackages?.Invoke(false);
-                DisableSpinner();
-
-                AssetStoreAPI.GetPackageThumbnails(json, true, (id, texture) =>
-                {
-                    var package = GetPackage(id);
-                    var packageImage = package.Q<Image>();
-                    packageImage.style.backgroundImage = texture;
-
-                    if (texture == null)
-                        packageImage.AddToClassList("package-image-not-found");
-                },
-                (id, error) =>
-                {
-                    ASDebug.LogWarning($"Package {id} could not download thumbnail successfully\n{error.Exception}");
-                });
+                ASDebug.LogError(result.Error.Message);
+                onFail?.Invoke(result.Error);
             }
 
-            void OnPackageDataDownloadFail(ASError error)
+            var packages = result.Packages;
+            var json = result.Json;
+
+            // Clear before appending as well
+            ClearPackages();
+
+            if (packages == null)
             {
-                onFail?.Invoke(error);
-                ASDebug.LogError(error.Message);
+                RefreshingPackages?.Invoke(false);
+                DisplayNoPackages();
+                return;
             }
+
+            DisplayAllPackages(packages);
+
+            // Only performed after adding all packages to prevent slowdowns. Sorting also repaints the view
+            Sort(_activeSorting);
+
+            RefreshingPackages?.Invoke(false);
+            DisableSpinner();
+
+            AssetStoreAPI.GetPackageThumbnails(json, true, (id, texture) =>
+            {
+                var package = GetPackage(id);
+                var packageImage = package.Q<Image>();
+                packageImage.style.backgroundImage = texture;
+
+                if (texture == null)
+                    packageImage.AddToClassList("package-image-not-found");
+            },
+            (id, error) =>
+            {
+                ASDebug.LogWarning($"Package {id} could not download thumbnail successfully\n{error.Exception}");
+            });
         }
 
         public void ClearPackages()
@@ -192,30 +196,18 @@ namespace AssetStoreTools.Uploader
             DisableSpinner();
         }
 
-        private void DisplayAllPackages(JsonValue json)
+        private void DisplayAllPackages(ICollection<PackageData> packages)
         {
-            var packageDict = json["packages"].AsDict(true);
-            ASDebug.Log($"All packages\n{json["packages"]}");
             // Each package has an identifier and a bunch of data (current version id, name, etc.)
-            foreach (var p in packageDict)
+            foreach (var package in packages)
             {
-                var packageId = p.Key;
-                var packageName = p.Value["name"].AsString(true);
-                var versionId = p.Value["id"].AsString(true);
-                var statusName = p.Value["status"].AsString(true);
-                var isCompleteProject = p.Value["is_complete_project"].AsBool(true);
-                var categoryName = p.Value["extra_info"].Get("category_info").Get("name").AsString(true);
-
-                var lastDate = p.Value["extra_info"].Get("modified").AsString(true);
-                var lastSize = p.Value["extra_info"].Get("size").AsString(true);
-
-                AddPackage(packageId, versionId, packageName, statusName, categoryName, lastDate, lastSize, isCompleteProject);
+                AddPackage(package);
             }
         }
 
-        private void AddPackage(string packageId, string versionId, string packageName, string status, string category, string lastDate, string lastSize, bool isCompleteProject)
+        private void AddPackage(PackageData packageData)
         {
-            var newEntry = PackageStorer.GetPackage(packageId, versionId, packageName, status, category, lastDate, lastSize, isCompleteProject);
+            var newEntry = PackageViewStorer.GetPackage(packageData);
             _allPackages.Add(newEntry);
         }
 
@@ -229,7 +221,7 @@ namespace AssetStoreTools.Uploader
             _packageScrollView.Clear();
             _packageGroups.Clear();
 
-            var groupedDict = new SortedDictionary<string, List<Package>>();
+            var groupedDict = new SortedDictionary<string, List<PackageView>>();
 
             // Group packages by status into a dictionary
             foreach (var p in _allPackages)
@@ -237,7 +229,7 @@ namespace AssetStoreTools.Uploader
                 var status = char.ToUpper(p.Status.First()) + p.Status.Substring(1);
 
                 if (!groupedDict.ContainsKey(status))
-                    groupedDict.Add(status, new List<Package>());
+                    groupedDict.Add(status, new List<PackageView>());
 
                 groupedDict[status].Add(p);
             }
@@ -263,7 +255,7 @@ namespace AssetStoreTools.Uploader
             }
 
             // Shared group adding method for priority and non-priority groups
-            void AddGroup(string groupName, List<Package> packages, bool createExpanded)
+            void AddGroup(string groupName, List<PackageView> packages, bool createExpanded)
             {
                 var group = new PackageGroup(groupName, createExpanded)
                 {
