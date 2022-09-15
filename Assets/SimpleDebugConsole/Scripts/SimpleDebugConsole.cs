@@ -17,6 +17,9 @@ namespace CoolishUI
         private Vector2 downPos;
         private Vector2 mousePosition;
 
+        int startIndex;
+        bool newLogAdded = false;
+
         private bool displayError = true;
         private bool displayWarning = true;
         private bool displayNormal = true;
@@ -74,6 +77,16 @@ namespace CoolishUI
                     isVisible = !isVisible;
                 }
             }
+            
+            if(newLogAdded && GUIHelper.logFontSize != 0)
+            {
+                calculateStartIndex();
+                int totalCount = logs.Count;
+                int totalVisibleCount = (int)(Screen.height * 0.80f / GUIHelper.logFontSize);
+                if (startIndex >= (totalCount - totalVisibleCount))
+                    scrollViewVector.y += GUIHelper.logFontSize * 2;
+                newLogAdded = false;
+            }            
         }
 
         void OnGUI()
@@ -81,10 +94,10 @@ namespace CoolishUI
             if (!isVisible) return;
 
             getDownPos();
-            logsRect.x = 0f;
-            logsRect.y = 0f;
-            logsRect.width = Screen.width;
-            logsRect.height = Screen.height;
+            logsRect.x = GUIHelper.rectX / 2;
+            logsRect.y = GUIHelper.rectY / 2;
+            logsRect.width = Screen.width - GUIHelper.rectX;
+            logsRect.height = Screen.height - GUIHelper.rectY;
 
             Vector2 drag = getDrag();
             if (drag.y != 0 && logsRect.Contains(new Vector2(downPos.x, Screen.height - downPos.y)))
@@ -97,7 +110,8 @@ namespace CoolishUI
                                         Screen.width - GUIHelper.rectX,
                                         Screen.height - GUIHelper.rectY),
                               () => {
-                                  scrollViewVector = GUILayout.BeginScrollView(scrollViewVector);
+                                  scrollViewVector = GUILayout.BeginScrollView(scrollViewVector);                                  
+                                  oldDrag = drag.y;
                                   drawLogs();
                                   GUILayout.EndScrollView();
 
@@ -121,8 +135,10 @@ namespace CoolishUI
         }
 
         void LogThreadedHandler(string message, string stackTrace, LogType type)
-        {
-            logs.Insert(0, new Log(message + stackTrace, type));
+        {            
+            //logs.Insert(0, new Log(message + stackTrace, type));
+            logs.Add(new Log(message, type));
+            newLogAdded = true;            
         }
 
         void drawLogs()
@@ -145,10 +161,15 @@ namespace CoolishUI
                         if (!displayNormal) continue;
                         color = Color.white;
                         break;
-                }
-
-                GUIHelper.DrawLabel(log.log, color);
+                }                
+                GUIHelper.DrawLabel(log.log, color);                
             }
+        }
+
+        void calculateStartIndex()
+        {
+            startIndex = (int)(scrollViewVector.y / GUIHelper.logFontSize);
+            startIndex = Mathf.Clamp(startIndex, 0, logs.Count);
         }
 
         Vector2 getDownPos()

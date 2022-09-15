@@ -19,6 +19,7 @@ namespace CoolishUI
 
         public static float rectX = 0;
         public static float rectY = 0;
+        public static int logFontSize = 0;
 
         private static void Setup()
         {
@@ -27,7 +28,8 @@ namespace CoolishUI
                 SetScreenSizeFactor();
 
                 logLabel = new GUIStyle(GUI.skin.label);
-                logLabel.fontSize = Mathf.RoundToInt(fontSizeFactor * 35);
+                logFontSize = Mathf.RoundToInt(fontSizeFactor * 35);
+                logLabel.fontSize = logFontSize;                
             }
             if (btnStyle == null)
             {
@@ -57,7 +59,7 @@ namespace CoolishUI
         {
             Setup();
 
-            logLabel.normal.textColor = color;
+            logLabel.normal.textColor = color;            
             GUILayout.Label(text, logLabel);
         }
 
